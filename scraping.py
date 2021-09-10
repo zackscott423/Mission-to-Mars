@@ -4,7 +4,8 @@ from bs4 import BeautifulSoup as soup
 import pandas as pd
 import datetime as dt
 from webdriver_manager.chrome import ChromeDriverManager
-
+from time import sleep
+import re
 
 def scrape_all():
     # Initiate headless driver for deployment
@@ -12,6 +13,7 @@ def scrape_all():
     browser = Browser('chrome', **executable_path, headless=True)
 
     news_title, news_paragraph = mars_news(browser)
+    hemisphere = scrape_hemisphere_data(browser)
 
     # Run all scraping functions and store results in a dictionary
     data = {
@@ -19,6 +21,7 @@ def scrape_all():
         "news_paragraph": news_paragraph,
         "featured_image": featured_image(browser),
         "facts": mars_facts(),
+        "hemispheres": hemisphere,
         "last_modified": dt.datetime.now()
     }
 
@@ -53,7 +56,6 @@ def mars_news(browser):
         return None, None
 
     return news_title, news_p
-
 
 def featured_image(browser):
     # Visit URL
@@ -96,6 +98,54 @@ def mars_facts():
 
     # Convert dataframe into HTML format, add bootstrap
     return df.to_html(classes="table table-striped")
+
+def scrape_hemisphere_data(browser):
+
+    # visit the URL 
+    url = 'https://astrogeology.usgs.gov/search/results?q=hemisphere+enhanced&k1=target&v1=Mars'
+    browser.visit(url)
+    sleep(2)
+    # Create a list to hold the images and titles.
+    hemisphere_image_urls = []
+
+    # Parse the data
+    
+    html = browser.html
+    urls_soup = soup(html, 'html.parser')
+
+    # 3. Write code to retrieve the image urls and titles for each hemisphere.
+    divs = urls_soup.find("div", class_='collapsible results')
+    anchors = divs.find_all('a')
+    relative_urls = set([anchor['href'] for anchor in anchors])
+    base_url = 'https://astrogeology.usgs.gov'
+   
+    for relative_url in relative_urls:
+        print(f'Running {relative_url}')
+        hemispheres = {}
+        
+        full_url = f'{base_url}{relative_url}'
+        browser.visit(full_url)
+        browser.links.find_by_text('Open').click()
+
+        
+        html = browser.html
+        urls_soup = soup(html, 'html.parser')
+        
+        downloads_div = urls_soup.find('div', class_='downloads')
+        img_anchor = downloads_div.find('a', text=re.compile('Sample'))
+        img_url = img_anchor['href']
+        # print(f'--> url: {img_url}')
+        
+        title_elem = urls_soup.select_one('div.content')
+        title = title_elem.find("h2", class_='title').get_text()
+        # print(f'--> title: {title}')
+        hemispheres = {
+            'img_url': img_url,
+            'title': title,
+        }
+        hemisphere_image_urls.append(hemispheres)
+       
+    return hemisphere_image_urls
 
 if __name__ == "__main__":
 
